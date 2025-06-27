@@ -59,7 +59,7 @@ const options = {
     cert: fs.readFileSync(path.join(__dirname, "certificates", "cert.pem"))
 };
 
-// クライアントからHTTPSで受け取る → HTTPサーバーに渡す
+// HTTPS で受け取り、HTTPサーバーに転送
 https.createServer(options, (req, res) => {
     const proxyReq = http.request(
         {
@@ -67,7 +67,7 @@ https.createServer(options, (req, res) => {
             port: 3000,
             path: req.url,
             method: req.method,
-            headers: req.headers,
+            headers: req.headers
         },
         proxyRes => {
             res.writeHead(proxyRes.statusCode, proxyRes.headers);
@@ -82,5 +82,5 @@ https.createServer(options, (req, res) => {
         res.end("Bad Gateway");
     });
 }).listen(443, () => {
-    console.log("HTTPS entry proxy listening on 443");
+    console.log("HTTPS proxy listening on port 443");
 });

@@ -1,7 +1,9 @@
 {
   "dependencies": {
     "express": "^4.21.2",
+    "http-mitm-proxy": "^1.1.0",
     "http-proxy": "^1.18.1",
+    "node-mitmproxy": "^3.1.1",
     "request": "^2.88.2"
   }
 }

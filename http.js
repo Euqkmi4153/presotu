@@ -1,36 +1,46 @@
+// internal_http_server.js
 const http = require("http");
 const https = require("https");
+const fs = require("fs");
 
-http.createServer((req, res) => {
-    const options = {
-        hostname: "httpbin.org",
+const options = {
+    key: fs.readFileSync('./.http-mitm-proxy/keys/ca.private.key'),
+    cert: fs.readFileSync('./.http-mitm-proxy/certs/ca.cer'),
+};
+
+https.createServer(options, (req, res) => {
+    const targetUrl = new URL(req.url.startsWith("http") ? req.url : `https://${req.headers.host}${req.url}`);
+
+    const proxyOptions = {
+        hostname: targetUrl.hostname,
         port: 443,
-        path: req.url,
+        path: targetUrl.pathname + targetUrl.search,
         method: req.method,
         headers: {
             ...req.headers,
-            host: "httpbin.org"
+            host: targetUrl.hostname
         },
-        servername: "httpbin.org" // TLS証明書照合用
+        servername: targetUrl.hostname
     };
 
-    const extReq = https.request(options, extRes => {
+    const proxyReq = https.request(proxyOptions, (proxyRes) => {
+        // CSPヘッダを追加
         const headers = {
-            ...extRes.headers,
-            "Content-Security-Policy": "default-src 'self'"
+            ...proxyRes.headers,
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; object-src 'none';"
         };
 
-        res.writeHead(extRes.statusCode, headers);
-        extRes.pipe(res);
+        res.writeHead(proxyRes.statusCode, headers);
+        proxyRes.pipe(res);
     });
 
-    req.pipe(extReq);
+    req.pipe(proxyReq);
 
-    extReq.on("error", err => {
-        console.error("Error contacting external server:", err);
+    proxyReq.on("error", err => {
+        console.error("Error forwarding request:", err);
         res.writeHead(502);
         res.end("Bad Gateway");
     });
-}).listen(3000, () => {
-    console.log("Internal HTTP handler listening on port 3000");
+}).listen(8080, () => {
+    console.log("Internal HTTP server listening on port 8080");
 });
