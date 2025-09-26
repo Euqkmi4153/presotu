@@ -1,9 +1,15 @@
 {
   "dependencies": {
+    "axios": "^1.11.0",
+    "css-tree": "^3.1.0",
+    "espree": "^10.4.0",
+    "estraverse": "^5.3.0",
     "express": "^4.21.2",
     "http-mitm-proxy": "^1.1.0",
     "http-proxy": "^1.18.1",
+    "jsdom": "^26.1.0",
     "node-mitmproxy": "^3.1.1",
+    "puppeteer": "^24.15.0",
     "request": "^2.88.2"
   }
 }
