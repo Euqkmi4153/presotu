@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 
 /* ── ESM モジュールを動的 import ── */
 let genCSP;
-(async () => { genCSP = (await import('./csp-generator.mjs')).generateCSP; })();
+(async () => { genCSP = (await import('./csp-generator-practice.mjs')).generateCSP; })();
 
 /* ── プロキシ実体 ── */
 const Mitm = typeof mitm === 'function' ? mitm : mitm.Proxy;

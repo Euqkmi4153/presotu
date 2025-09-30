@@ -1,4 +1,4 @@
-import * as espreespree from 'espree';
+import * as espree from 'espree';
 import fs from 'fs';
 const path = fs.readFileSync('./sample/inlineScript.html', 'utf-8');
 

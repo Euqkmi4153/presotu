@@ -2,6 +2,7 @@
   "dependencies": {
     "axios": "^1.11.0",
     "css-tree": "^3.1.0",
+    "escodegen": "^2.1.0",
     "espree": "^10.4.0",
     "estraverse": "^5.3.0",
     "express": "^4.21.2",
@@ -11,5 +12,23 @@
     "node-mitmproxy": "^3.1.1",
     "puppeteer": "^24.15.0",
     "request": "^2.88.2"
-  }
+  },
+  "name": "proxy-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Euqkmi4153/presotu.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Euqkmi4153/presotu/issues"
+  },
+  "homepage": "https://github.com/Euqkmi4153/presotu#readme"
 }
