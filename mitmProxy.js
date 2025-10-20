@@ -2,16 +2,8 @@
    run:  node mitmproxy.js
 ----------------------------------------------------*/
 const mitm = require('http-mitm-proxy');   // v1./v2 どちらも可
-const zlib = require('zlib');
-const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
-const gunzip = promisify(zlib.gunzip);
-const gzip = promisify(zlib.gzip);
-
-/* ── ESM モジュールを動的 import ── */
-let genCSP;
-(async () => { genCSP = (await import('./csp-generator-practice.mjs')).generateCSP; })();
 
 /* ── プロキシ実体 ── */
 const Mitm = typeof mitm === 'function' ? mitm : mitm.Proxy;
@@ -26,79 +18,73 @@ const proxy = new Mitm();
         for (const f of fs.readdirSync(dir))
             if (!f.startsWith('ca.') && !f.startsWith('subCA.')) fs.unlinkSync(path.join(dir, f));
     });
-    console.log('[INIT] old host‑cert cache cleared');
+    console.log('[INIT] old host-cert cache cleared');
 })();
 
 /* ::::: イベント ::::: */
 proxy.onError((ctx, err) => {
-    if (err.code === 'EPIPE') return;
-    console.error('Proxy error:', err);
+    if (err && err.code === 'EPIPE') return;
+    console.error('[MITM] Proxy error:', err && err.stack ? err.stack : err);
+
+    try {
+        if (ctx && ctx.serverToProxyResponse) {
+            console.error('[MITM] upstream headers at error:', ctx.serverToProxyResponse.headers);
+        }
+        if (ctx && ctx.clientToProxyRequest) {
+            console.error('[MITM] client request headers at error:', ctx.clientToProxyRequest.headers);
+        }
+    } catch (e) { /* ignore logging failure */ }
 });
 
-/* リクエスト → 内部 HTTPS サーバーへ横流し */
+/* --- ヘッダサニタイズ（リクエストを内部サーバへ渡す前）--- */
+function sanitizeReqHeaders(h) {
+    const out = { ...h };
+    // hop-by-hop / proxy 関連は削除
+    delete out['proxy-connection'];
+    delete out['connection'];
+    delete out['keep-alive'];
+    delete out['te'];
+    delete out['trailer'];
+    delete out['upgrade'];
+    // 衝突の元を排除
+    delete out['transfer-encoding'];
+    delete out['content-length'];
+    delete out['expect'];
+    // undefined 値のキーは削除
+    Object.keys(out).forEach(k => { if (typeof out[k] === 'undefined') delete out[k]; });
+    return out;
+}
+
+/* リクエスト → 内部 HTTP サーバーへ横流し（ヘッダをサニタイズ） */
 proxy.onRequest((ctx, cb) => {
     const req = ctx.clientToProxyRequest;
-    const url = req.url.startsWith('http') ? new URL(req.url)
-        : new URL(`https://${req.headers.host}${req.url}`);
+    const rawUrl = req && req.url ? req.url : '/';
+    const url = rawUrl.startsWith('http') ? new URL(rawUrl)
+        : new URL(`https://${req.headers.host}${rawUrl}`);
+
+    const safeHeaders = sanitizeReqHeaders(req.headers || {});
+    // 正規化された Host（末尾ドットを除去）
+    safeHeaders.host = (url.host || '').replace(/\.$/, '');
+
     ctx.proxyToServerRequestOptions = {
         protocol: 'http:',
-        hostname: 'localhost',
+        hostname: 'localhost',  // 内部 HTTP サーバへ転送
         port: 8080,
         path: url.pathname + url.search,
         method: req.method,
-        headers: { ...req.headers, host: url.hostname },
+        headers: safeHeaders,
     };
     ctx.isSSL = false;
     ctx.connectToServer = false;
+
+    // デバッグ: クライアントヘッダをログして問題追跡（必要時有効化）
+    // console.log('[MITM] safeHeaders -> internal:', safeHeaders);
+
     cb();
 });
 
-/* レスポンスフック：HTML だけ横取りして CSP を注入 */
-proxy.onResponse((ctx, cb) => {
-    const headers = ctx.serverToProxyResponse.headers;
-    const ct = (headers['content-type'] || '').toLowerCase();
-    if (!ct.includes('text/html')) {
-        return cb();   // HTML 以外は素通し
-    }
-
-    if (typeof mitm.gunzip === 'function') {
-        ctx.use(mitm.gunzip());        // ✅ () を付けてミドルウェア・オブジェクトを渡す
-    }
-    const bufs = [];
-    ctx.onResponseData((_, chunk, done) => {
-        if (chunk) bufs.push(chunk);                 // バッファリング
-        done(null, null);                            // クライアントへは流さない
-    });
-    ctx.onResponseEnd(async (_, done) => {
-        try {
-            const raw = Buffer.concat(bufs);
-            const decoded = (headers['content-encoding'] || '').includes('gzip')
-                ? await gunzip(raw).catch(() => raw)
-                : raw;
-            const html = decoded.toString();
-
-            // --- 生成した CSP ---
-            const req = ctx.clientToProxyRequest;
-            const fullURL = req.url.startsWith('http')
-                ? req.url
-                : `https://${req.headers.host}${req.url}`;
-            const csp = await genCSP(fullURL, html);
-
-            // --- ヘッダー調整 ---
-            delete headers['content-length'];
-            delete headers['content-encoding'];      // 平文で返す
-            headers['content-security-policy'] = csp;
-
-            // --- クライアントへ送出 ---
-            ctx.proxyToClientResponse.write(html);
-            ctx.proxyToClientResponse.end();
-        } catch (e) {
-            console.error('CSP inject error', e);
-        }
-        done();
-    });
-    cb();
-});
+/* レスポンスは素通し（CSP は HTTP サーバ側で付与） */
+proxy.onResponse((ctx, cb) => cb());
 
 /* ::::: 監視開始 ::::: */
 proxy.listen({
