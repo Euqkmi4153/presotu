@@ -1,15 +1,12 @@
-/* mitmproxy.js
-   run:  node mitmproxy.js
-----------------------------------------------------*/
-const mitm = require('http-mitm-proxy');   // v1./v2 どちらも可
+/* mitmproxy.js  — CommonJS */
+const mitm = require('http-mitm-proxy');
 const fs = require('fs');
 const path = require('path');
 
-/* ── プロキシ実体 ── */
 const Mitm = typeof mitm === 'function' ? mitm : mitm.Proxy;
 const proxy = new Mitm();
 
-/* :::: 起動時にホスト証明書キャッシュをクリーン ::: */
+/* 起動時にホスト証明書キャッシュをクリーン */
 (function cleanCache() {
     const base = '.http-mitm-proxy';
     ['certs', 'keys'].forEach(d => {
@@ -21,41 +18,27 @@ const proxy = new Mitm();
     console.log('[INIT] old host-cert cache cleared');
 })();
 
-/* ::::: イベント ::::: */
 proxy.onError((ctx, err) => {
     if (err && err.code === 'EPIPE') return;
     console.error('[MITM] Proxy error:', err && err.stack ? err.stack : err);
-
-    try {
-        if (ctx && ctx.serverToProxyResponse) {
-            console.error('[MITM] upstream headers at error:', ctx.serverToProxyResponse.headers);
-        }
-        if (ctx && ctx.clientToProxyRequest) {
-            console.error('[MITM] client request headers at error:', ctx.clientToProxyRequest.headers);
-        }
-    } catch (e) { /* ignore logging failure */ }
 });
 
-/* --- ヘッダサニタイズ（リクエストを内部サーバへ渡す前）--- */
+/* リクエストヘッダ: hop-by-hop のみ削除（CL/TE は残す） */
 function sanitizeReqHeaders(h) {
     const out = { ...h };
-    // hop-by-hop / proxy 関連は削除
     delete out['proxy-connection'];
     delete out['connection'];
     delete out['keep-alive'];
     delete out['te'];
     delete out['trailer'];
     delete out['upgrade'];
-    // 衝突の元を排除
-    delete out['transfer-encoding'];
-    delete out['content-length'];
     delete out['expect'];
-    // undefined 値のキーは削除
+    // CL/TE は残す
     Object.keys(out).forEach(k => { if (typeof out[k] === 'undefined') delete out[k]; });
     return out;
 }
 
-/* リクエスト → 内部 HTTP サーバーへ横流し（ヘッダをサニタイズ） */
+/* リクエスト → 内部 HTTP サーバーへ横流し */
 proxy.onRequest((ctx, cb) => {
     const req = ctx.clientToProxyRequest;
     const rawUrl = req && req.url ? req.url : '/';
@@ -63,30 +46,34 @@ proxy.onRequest((ctx, cb) => {
         : new URL(`https://${req.headers.host}${rawUrl}`);
 
     const safeHeaders = sanitizeReqHeaders(req.headers || {});
-    // 正規化された Host（末尾ドットを除去）
+    // Host は正規化（末尾ドット除去）
     safeHeaders.host = (url.host || '').replace(/\.$/, '');
+
+    // CL がなく、ボディを持つ可能性があり、TE も無いときは chunked を明示
+    const method = (req.method || 'GET').toUpperCase();
+    const mayHaveBody = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    const hasCL = typeof req.headers['content-length'] === 'string' && req.headers['content-length'] !== '';
+    const hasTE = typeof req.headers['transfer-encoding'] === 'string' && req.headers['transfer-encoding'] !== '';
+    if (mayHaveBody && !hasCL && !hasTE) {
+        safeHeaders['transfer-encoding'] = 'chunked';
+    }
 
     ctx.proxyToServerRequestOptions = {
         protocol: 'http:',
-        hostname: 'localhost',  // 内部 HTTP サーバへ転送
+        hostname: 'localhost',
         port: 8080,
         path: url.pathname + url.search,
-        method: req.method,
+        method,
         headers: safeHeaders,
     };
     ctx.isSSL = false;
     ctx.connectToServer = false;
-
-    // デバッグ: クライアントヘッダをログして問題追跡（必要時有効化）
-    // console.log('[MITM] safeHeaders -> internal:', safeHeaders);
-
     cb();
 });
 
-/* レスポンスは素通し（CSP は HTTP サーバ側で付与） */
+/* レスポンスは素通し（CSP は内部HTTPサーバ側で付与） */
 proxy.onResponse((ctx, cb) => cb());
 
-/* ::::: 監視開始 ::::: */
 proxy.listen({
     host: '0.0.0.0',
     port: 3000,
@@ -95,5 +82,5 @@ proxy.listen({
     caPrivateKeyPath: './.http-mitm-proxy/keys/subCA.key',
     caCertChainPath: './.http-mitm-proxy/certs/fullchain.pem'
 }, () => {
-    console.log('MITM proxy listening on 3000')
+    console.log('MITM proxy listening on 3000');
 });
