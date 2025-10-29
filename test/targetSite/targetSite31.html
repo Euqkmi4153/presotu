@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <script>
+      window.addEventListener('securitypolicyviolation', (e) => {
+        console.log(e);
+        securitypolicyviolation({
+          effectiveDirective: e.effectiveDirective,
+          blockedURI: e.blockedURI,
+        });
+      });
+    </script>
+    <h1>aaa</h1>
+    <div onAbort="alert('click')">Click me!</div>
+
+    <!-- <script src="./index.mjs"></script> -->
+    <!-- <script src="./script.mjs"></script> -->
+  </body>
+</html>

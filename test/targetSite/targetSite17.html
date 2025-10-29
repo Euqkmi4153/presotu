@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <meta
+    http-equiv="content-security-policy"
+    content="script-src http://localhost:8888/index.mjs"
+  />
+  <script>
+    window.addEventListener('securitypolicyviolation', (e) => {
+      console.log(e);
+      securitypolicyviolation({
+        effectiveDirective: e.effectiveDirective,
+        blockedURI: e.blockedURI,
+      });
+    });
+  </script>
+  <style>
+    h1 {
+      background: url('https://interactive-examples.mdn.mozilla.net/media/cc0-images/grapefruit-slice-332-332.jpg');
+    }
+  </style>
+  <body>
+    <h1>aaa</h1>
+    <!-- <script src="./index.mjs"></script> -->
+    <script>
+      (async () => {
+        await fetch('http://localhost:8888/index.mjs').then((data) =>
+          console.log(data)
+        );
+      })();
+    </script>
+    <!-- <script src="./script.mjs"></script> -->
+  </body>
+</html>

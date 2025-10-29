@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <h1>aaa</h1>
+  </body>
+  <script defer>
+    const a = 1;
+    const url = 'https://not-example.com/';
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.send();
+    const base = 'https://youtube.com/';
+    (async () => {
+      await fetch(base).then((data) => data.json);
+    })();
+    fetch('https://b.hatena.ne.jp/hotentry/it').then((data) => data.json());
+
+    var s = document.createElement('script');
+    s.src = 'http://localhost:8080/index.js';
+    document.querySelector('head').appendChild(s);
+  </script>
+</html>

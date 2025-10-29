@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <script defer>
+      window.addEventListener('securitypolicyviolation', (e) => {
+        console.log(e);
+        securitypolicyviolation({
+          effectiveDirective: e.effectiveDirective,
+          blockedURI: e.blockedURI,
+        });
+      });
+    </script>
+    <h1>aaa</h1>
+
+    <!-- <script src="./index.mjs"></script> -->
+    <!-- <script src="./script.mjs"></script> -->
+    <script defer>
+      document.querySelector('h1').innerHTML =
+        '<div style="display: none">Foo</div>';
+      // .innerHTML =
+      //   '<div style="display: none">Foo</div>';
+    </script>
+  </body>
+</html>

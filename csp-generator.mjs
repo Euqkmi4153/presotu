@@ -15,6 +15,8 @@ function addOrigin(set, raw, baseURL) {
         else if (u.protocol === 'ws:' || u.protocol === 'wss:') set.add((u.protocol === 'wss:' ? 'https:' : 'http:') + '//' + u.host);
     } catch { }
 }
+const deepClonePolicy = (p) =>
+    Object.fromEntries(Object.entries(p).map(([k, v]) => [k, new Set(v)]));
 
 /* ---------- base policies ---------- */
 function basePolicyCompat() {
@@ -129,34 +131,62 @@ function stringify(policy, { reportUri = '/csp-report' } = {}) {
 /**
  * opts:
  *  - mode: 'compat' | 'nonce'  (default 'compat')
- *  - nonce: string (mode='nonce' の時に利用)
  *  - reportUri: string
  *  - addReportOnly: boolean  ← 監視用ヘッダも同時に返す
+ *  - reportOnlyStyle: 'mirror' | 'monitor' | 'relaxed'
+ *      - mirror  : enforce と同一（現状維持）
+ *      - monitor : ★推奨。TT を要求 + script を緩めて観測
+ *      - relaxed : さらに緩い観測（調査用）
  */
 export async function generateCSP(url, html, opts = {}) {
     const mode = opts.mode ?? 'compat';
     const nonce = mode === 'nonce' ? (opts.nonce || randomBytes(16).toString('base64')) : undefined;
 
-    let policy = (mode === 'nonce') ? basePolicyNonce(nonce) : basePolicyCompat();
-
-    policy = parseHTML(html, url, policy, { mode });
-    policy = await parseCSS(html, url, policy);
+    // 強制用ポリシー（enforce）
+    let enforce = (mode === 'nonce') ? basePolicyNonce(nonce) : basePolicyCompat();
+    enforce = parseHTML(html, url, enforce, { mode });
+    enforce = await parseCSS(html, url, enforce);
 
     const { document: doc } = new JSDOM(html, { url }).window;
     for (const s of doc.querySelectorAll('script:not([src])')) {
-        parseJSIntoPolicy(policy, s.textContent || '', url);
+        parseJSIntoPolicy(enforce, s.textContent || '', url);
     }
     const srcs = [...doc.querySelectorAll('script[src]')].map(sc => sc.src);
     const jsList = await Promise.all(srcs.map(u => axios.get(u).then(r => r.data).catch(() => null)));
-    jsList.forEach(js => parseJSIntoPolicy(policy, js || '', url));
+    jsList.forEach(js => parseJSIntoPolicy(enforce, js || '', url));
 
-    const header = stringify(policy, { reportUri: opts.reportUri ?? '/csp-report' });
+    const enforceHeader = stringify(enforce, { reportUri: opts.reportUri ?? '/csp-report' });
 
-    return {
-        enforceHeader: header,                                 // 常に強制ヘッダ用を返す
-        reportOnlyHeader: opts.addReportOnly ? header : null,  // 監視を出したい時だけ
-        nonce
-    };
+    // Report-Only（監視重視型）
+    let reportOnlyHeader = null;
+    if (opts.addReportOnly) {
+        const style = opts.reportOnlyStyle ?? 'monitor'; // ← デフォルトで “監視重視型”
+        let ro = deepClonePolicy(enforce);
+
+        if (style === 'mirror') {
+            // そのまま
+        } else if (style === 'monitor') {
+            // Trusted Types 監視を有効化
+            ro["require-trusted-types-for"] = new Set(["'script'"]);
+            ro["trusted-types"] = new Set(["default"]);
+            // 観測のため script を緩める（ブロックしない観測を優先）
+            ro["script-src"].add("'unsafe-inline'");
+            ro["script-src"].add("'unsafe-eval'");
+            ro["script-src"].add("data:");
+            ro["script-src"].add("https:");
+        } else if (style === 'relaxed') {
+            ro["require-trusted-types-for"] = new Set(["'script'"]);
+            ro["trusted-types"] = new Set(["default"]);
+            ro["script-src"] = new Set(["'self'", "'unsafe-inline'", "'unsafe-eval'", "data:", "https:"]);
+            ro["style-src"].add("'unsafe-inline'");
+            ro["img-src"].add("*");
+            ro["connect-src"].add("https:");
+        }
+
+        reportOnlyHeader = stringify(ro, { reportUri: opts.reportUri ?? '/csp-report' });
+    }
+
+    return { enforceHeader, reportOnlyHeader, nonce };
 }
 
 /* CLI (任意) */
@@ -167,6 +197,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         process.exit(1);
     }
     const html = await (await fetch(target)).text();
-    const { enforceHeader } = await generateCSP(target, html, { mode: 'compat' });
+    const { enforceHeader, reportOnlyHeader } =
+        await generateCSP(target, html, { mode: 'compat', addReportOnly: true, reportOnlyStyle: 'monitor' });
     console.log('--- CSP ---\n' + enforceHeader);
+    console.log('--- CSP-Report-Only ---\n' + reportOnlyHeader);
 }
