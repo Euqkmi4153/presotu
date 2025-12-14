@@ -1,0 +1,28 @@
+<!-- OK，SRIを含む -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- <script src="https://not-example.com/js/library.js"></script> -->
+  <meta http-equiv="content-security-policy"
+    content="script-src 'strict-dynamic' 'sha256-i01M4d3OlcvBtd27xF9C7gE4EIdDo0pONgXfdV3rarA=' 'unsafe-hashes'; style-src 'none'" />
+</head>
+
+<body>
+  <script>
+    window.addEventListener('securitypolicyviolation', (e) => {
+      console.log(e);
+      securitypolicyviolation({
+        effectiveDirective: e.effectiveDirective,
+        blockedURI: e.blockedURI,
+      });
+    });
+  </script>
+  <h1>aaa</h1>
+  <script src="http://localhost:8080/test/targetSite/script.js"
+    integrity="sha256-i01M4d3OlcvBtd27xF9C7gE4EIdDo0pONgXfdV3rarA="></script>
+  <!-- <script src="https://code.jquery.com/jquery-2.2.4.js"></script> -->
+</body>
+
+</html>

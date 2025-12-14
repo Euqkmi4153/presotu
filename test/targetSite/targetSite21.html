@@ -1,30 +1,34 @@
+<!-- OK，前田のシステムでは失敗 -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-  </head>
-  <!-- <meta
+
+<head>
+  <meta charset="UTF-8" />
+</head>
+<!-- <meta
     http-equiv="content-security-policy"
     content="script-src 'strict-dynamic' 'self' 'nonce-aa' 'nonce-random' 'nonce-bbb' ;"
   /> -->
-  <body>
-    <script nonce="aa">
-      window.addEventListener('securitypolicyviolation', (e) => {
-        console.log(e);
-        securitypolicyviolation({
-          effectiveDirective: e.effectiveDirective,
-          blockedURI: e.blockedURI,
-        });
-      });
-    </script>
 
-    <h1>aaa</h1>
-    <p>asdf</p>
-    <!-- <script src="index.mjs"></script> -->
-    <!-- <script src="/script.mjs"></script> -->
-    <script async>
-      document.querySelector('p').innerHTML =
-        '<img src="1" onerror="alert(1)">';
-    </script>
-  </body>
+<body>
+  <script nonce="aa">
+    window.addEventListener('securitypolicyviolation', (e) => {
+      console.log(e);
+      securitypolicyviolation({
+        effectiveDirective: e.effectiveDirective,
+        blockedURI: e.blockedURI,
+      });
+    });
+  </script>
+
+  <h1>aaa</h1>
+  <p>asdf</p>
+  <!-- <script src="index.mjs"></script> -->
+  <!-- <script src="/script.mjs"></script> -->
+  <script async>
+    document.querySelector('p').innerHTML =
+      '<img src="1" onerror="alert(1)">';
+  </script>
+</body>
+
 </html>

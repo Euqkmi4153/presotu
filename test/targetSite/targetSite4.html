@@ -1,22 +1,27 @@
+<!-- x-Frame-Originが原因 -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-  </head>
-  <body>
-    <script>
-      window.addEventListener('securitypolicyviolation', (e) => {
-        console.log(e);
-        securitypolicyviolation({
-          effectiveDirective: e.effectiveDirective,
-          blockedURI: e.blockedURI,
-        });
-      });
-    </script>
-    <h1>aaa</h1>
 
-    <iframe src="https://not-example.com/"></iframe>
-    <!-- <script src="./index.mjs"></script> -->
-    <!-- <script src="./script.mjs"></script> -->
-  </body>
+<head>
+  <meta charset="UTF-8" />
+</head>
+
+<body>
+  <script>
+    window.addEventListener('securitypolicyviolation', (e) => {
+      console.log(e);
+      securitypolicyviolation({
+        effectiveDirective: e.effectiveDirective,
+        blockedURI: e.blockedURI,
+      });
+    });
+  </script>
+  <h1>aaa</h1>
+
+  <!-- <iframe src="https://www.w3.org/"></iframe> -->
+  <iframe src="https://www.kansai-u.ac.jp/ja/?stt_lang=ja"></iframe>
+  <!-- <script src="./index.mjs"></script> -->
+  <!-- <script src="./script.mjs"></script> -->
+</body>
+
 </html>

@@ -1,32 +1,36 @@
+<!-- OK -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-  </head>
-  <body>
-    <script>
-      window.addEventListener('securitypolicyviolation', (e) => {
-        console.log(e);
-        securitypolicyviolation({
-          effectiveDirective: e.effectiveDirective,
-          blockedURI: e.blockedURI,
-        });
-      });
-    </script>
-    <h1>aaa</h1>
-    <div onDragDrop="alert('click')">Click me!</div>
-    <script>
-      const a = 'http://localhost:8080/index.js';
-      var s = document.createElement('script');
-      s.src = a;
-      document.querySelector('head').appendChild(s, { is: 'expanding-list' });
 
-      const url = 'https://not-example.com/';
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', url);
-      xhr.send();
-    </script>
-    <!-- <script src="./index.mjs"></script> -->
-    <!-- <script src="./script.mjs"></script> -->
-  </body>
+<head>
+  <meta charset="UTF-8" />
+</head>
+
+<body>
+  <script>
+    window.addEventListener('securitypolicyviolation', (e) => {
+      console.log(e);
+      securitypolicyviolation({
+        effectiveDirective: e.effectiveDirective,
+        blockedURI: e.blockedURI,
+      });
+    });
+  </script>
+  <h1>aaa</h1>
+  <div onDragDrop="alert('click')">Click me!</div>
+  <script>
+    const a = 'http://localhost:8080/index.js';
+    var s = document.createElement('script');
+    s.src = a;
+    document.querySelector('head').appendChild(s, { is: 'expanding-list' });
+
+    const url = 'https://not-example.com/';
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.send();
+  </script>
+  <!-- <script src="./index.mjs"></script> -->
+  <!-- <script src="./script.mjs"></script> -->
+</body>
+
 </html>

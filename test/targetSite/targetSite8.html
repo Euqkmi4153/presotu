@@ -1,25 +1,25 @@
+<!-- OK，style-src 'self''unsafe-inline'https: ，https://not-example.com/styles/main.css 200/text-css h1の末尾にfrom not-example.com CSSが表示されれば成功 -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-  </head>
-  <link
-    href="https://not-example.com/styles/main.css"
-    rel="stylesheet"
-    type="text/css"
-  />
-  <body>
-    <script>
-      window.addEventListener('securitypolicyviolation', (e) => {
-        console.log(e);
-        securitypolicyviolation({
-          effectiveDirective: e.effectiveDirective,
-          blockedURI: e.blockedURI,
-        });
+
+<head>
+  <meta charset="UTF-8" />
+</head>
+<link href="https://not-example.com/styles/main.css" rel="stylesheet" type="text/css" />
+
+<body>
+  <script>
+    window.addEventListener('securitypolicyviolation', (e) => {
+      console.log(e);
+      securitypolicyviolation({
+        effectiveDirective: e.effectiveDirective,
+        blockedURI: e.blockedURI,
       });
-    </script>
-    <h1>aaa</h1>
-    <!-- <script src="./index.mjs"></script> -->
-    <!-- <script src="./script.mjs"></script> -->
-  </body>
+    });
+  </script>
+  <h1>aaa</h1>
+  <!-- <script src="./index.mjs"></script> -->
+  <!-- <script src="./script.mjs"></script> -->
+</body>
+
 </html>

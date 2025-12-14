@@ -1,13 +1,24 @@
+<!-- OK -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-  </head>
-  <meta
-    http-equiv="content-security-policy"
-    content="script-src http://localhost:8888/index.mjs"
-  />
+
+<head>
+  <meta charset="UTF-8" />
+  <title>targetSite17</title>
+  <style>
+    h1 {
+      background: url('https://interactive-examples.mdn.mozilla.net/media/cc0-images/grapefruit-slice-332-332.jpg');
+    }
+  </style>
+</head>
+
+<body>
   <script>
+    // DevToolsの ReferenceError 回避用ダミー
+    window.securitypolicyviolation =
+      window.securitypolicyviolation ||
+      function (e) { console.log('[CSP-violation]', e); };
+
     window.addEventListener('securitypolicyviolation', (e) => {
       console.log(e);
       securitypolicyviolation({
@@ -16,21 +27,22 @@
       });
     });
   </script>
-  <style>
-    h1 {
-      background: url('https://interactive-examples.mdn.mozilla.net/media/cc0-images/grapefruit-slice-332-332.jpg');
-    }
-  </style>
-  <body>
-    <h1>aaa</h1>
-    <!-- <script src="./index.mjs"></script> -->
-    <script>
-      (async () => {
-        await fetch('http://localhost:8888/index.mjs').then((data) =>
-          console.log(data)
-        );
-      })();
-    </script>
-    <!-- <script src="./script.mjs"></script> -->
-  </body>
+
+  <h1>aaa</h1>
+
+  <!-- 開発モジュールを読み込む：/_dev/ 経由で同一オリジンにする -->
+  <script type="module">
+    // モジュールとして読み込む場合
+    // import '/_dev/index.mjs';
+
+    // fetch 動作を確認したい場合（同一オリジンなので Mixed Content にならない）
+    (async () => {
+      const res = await fetch('/_dev/index.mjs');
+      console.log('[/_dev/index.mjs status]', res.status);
+      const txt = await res.text();
+      console.log('[/_dev/index.mjs body (head)]', txt.slice(0, 120));
+    })();
+  </script>
+</body>
+
 </html>

@@ -1,82 +1,82 @@
-/* csp-generator.mjs — “壊さず守る”互換モードを既定 */
+/* csp-generator.mjs — CSP strict/nonce モード（XSS防止） */
 import { JSDOM } from 'jsdom';
 import axios from 'axios';
 import * as csstree from 'css-tree';
 import * as espree from 'espree';
 import estraverse from 'estraverse';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 
 /* ---------- utils ---------- */
-const sha256 = s => createHash('sha256').update(s).digest('base64');
 function addOrigin(set, raw, baseURL) {
     try {
         const u = new URL(raw, baseURL);
         if (u.protocol === 'http:' || u.protocol === 'https:') set.add(u.origin);
-        else if (u.protocol === 'ws:' || u.protocol === 'wss:') set.add((u.protocol === 'wss:' ? 'https:' : 'http:') + '//' + u.host);
+        else if (u.protocol === 'ws:' || u.protocol === 'wss:') {
+            set.add((u.protocol === 'wss:' ? 'https:' : 'http:') + '//' + u.host);
+        }
     } catch { }
 }
+
 const deepClonePolicy = (p) =>
     Object.fromEntries(Object.entries(p).map(([k, v]) => [k, new Set(v)]));
 
-/* ---------- base policies ---------- */
-function basePolicyCompat() {
-    return {
-        "default-src": new Set(["'self'"]),
-        "script-src": new Set(["'self'", "https:"]),
-        "style-src": new Set(["'self'", "'unsafe-inline'", "https:"]),
-        "img-src": new Set(["'self'", "data:", "blob:", "https:"]),
-        "font-src": new Set(["'self'", "data:", "https:"]),
-        "connect-src": new Set(["'self'", "https:"]),
-        "media-src": new Set(["'self'", "data:", "blob:", "https:"]),
-        "worker-src": new Set(["'self'", "blob:"]),
-        "frame-src": new Set(["'self'"]),
-        "form-action": new Set(["'self'"]),
-    };
-}
+/* ---------- base policy (STRICT) ---------- */
 function basePolicyNonce(nonce) {
     return {
         "default-src": new Set(["'self'"]),
         "script-src": new Set(["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"]),
-        "style-src": new Set(["'self'", "'unsafe-inline'", "https:"]),
+        "script-src-elem": new Set(["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"]),
+        "script-src-attr": new Set([]),               // ← on* 属性は一切許可しない
+        "style-src": new Set(["'self'", "https:"]),   // unsafe-inline 不可
         "img-src": new Set(["'self'", "data:", "blob:", "https:"]),
         "font-src": new Set(["'self'", "data:", "https:"]),
         "connect-src": new Set(["'self'", "https:"]),
         "media-src": new Set(["'self'", "data:", "blob:", "https:"]),
         "worker-src": new Set(["'self'", "blob:"]),
         "frame-src": new Set(["'self'"]),
+        "object-src": new Set(["'none'"]),             // ← object/embed/applet 完全禁止
         "form-action": new Set(["'self'"]),
+        "base-uri": new Set(["'self'"]),
     };
 }
 
-/* ---------- HTML / CSS / JS 解析 ---------- */
-function parseHTML(html, baseURL, policy, { mode }) {
+/* ---------- HTML / CSS / JS 解析（許可拡張のみ、危険要素は許可しない） ---------- */
+function parseHTML(html, baseURL, policy) {
     const { document: doc } = new JSDOM(html, { url: baseURL }).window;
 
-    doc.querySelectorAll('script[src]').forEach(el => addOrigin(policy['script-src'], el.src, baseURL));
-    doc.querySelectorAll('link[rel="stylesheet"]').forEach(el => addOrigin(policy['style-src'], el.href, baseURL));
-    doc.querySelectorAll('img[src]').forEach(el => addOrigin(policy['img-src'], el.src, baseURL));
-    doc.querySelectorAll('audio[src], video[src], source[src]').forEach(el => addOrigin(policy['media-src'], el.src, baseURL));
-    doc.querySelectorAll('iframe[src]').forEach(el => addOrigin(policy['frame-src'], el.src, baseURL));
-    doc.querySelectorAll('form[action]').forEach(el => addOrigin(policy['form-action'], el.action, baseURL));
+    // 外部リソースのみ追加（inline / on* は無視）
+    doc.querySelectorAll('script[src]').forEach(el =>
+        addOrigin(policy['script-src'], el.src, baseURL)
+    );
+    doc.querySelectorAll('link[rel="stylesheet"]').forEach(el =>
+        addOrigin(policy['style-src'], el.href, baseURL)
+    );
+    doc.querySelectorAll('img[src]').forEach(el =>
+        addOrigin(policy['img-src'], el.src, baseURL)
+    );
+    doc.querySelectorAll('audio[src], video[src], source[src]').forEach(el =>
+        addOrigin(policy['media-src'], el.src, baseURL)
+    );
+    doc.querySelectorAll('iframe[src]').forEach(el =>
+        addOrigin(policy['frame-src'], el.src, baseURL)
+    );
+    doc.querySelectorAll('form[action]').forEach(el =>
+        addOrigin(policy['form-action'], el.action, baseURL)
+    );
 
-    if (mode !== 'nonce') {
-        // compat: インライン script はハッシュで許可
-        [...doc.querySelectorAll('script:not([src])')].forEach(s => {
-            const code = s.textContent || '';
-            if (code.trim()) policy['script-src'].add(`'sha256-${sha256(code)}'`);
-        });
-    }
     return policy;
 }
 
 async function parseCSS(html, baseURL, policy) {
     const { document: doc } = new JSDOM(html, { url: baseURL }).window;
     const links = [...doc.querySelectorAll('link[rel="stylesheet"]')].map(l => l.href);
-    const cssTexts = await Promise.all(links.map(u => axios.get(u).then(r => r.data).catch(() => '')));
+    const cssTexts = await Promise.all(
+        links.map(u => axios.get(u).then(r => r.data).catch(() => ''))
+    );
 
     const walk = (css) => {
         if (!css) return;
-        const ast = csstree.parse(css, { parseAtrulePrelude: true, parseRulePrelude: true });
+        const ast = csstree.parse(css);
         csstree.walk(ast, (n) => {
             if (n.type === 'Url') {
                 const raw = String(n.value).replace(/['"]/g, '');
@@ -85,6 +85,7 @@ async function parseCSS(html, baseURL, policy) {
             }
         });
     };
+
     cssTexts.forEach(walk);
     doc.querySelectorAll('style').forEach(s => walk(s.textContent || ''));
     return policy;
@@ -99,24 +100,13 @@ function parseJSIntoPolicy(policy, jsCode, baseURL) {
                 const callee = node.callee;
                 const a0 = node.arguments?.[0];
                 const lit = (a0?.type === 'Literal' && typeof a0.value === 'string') ? a0.value : null;
-                if (callee?.type === 'Identifier' && callee.name === 'fetch' && lit) addOrigin(policy['connect-src'], lit, baseURL);
-                if (callee?.type === 'MemberExpression' && callee.object?.name === 'axios' && lit) addOrigin(policy['connect-src'], lit, baseURL);
+                if (callee?.type === 'Identifier' && callee.name === 'fetch' && lit)
+                    addOrigin(policy['connect-src'], lit, baseURL);
             }
             if (node.type === 'NewExpression' && node.callee?.name === 'WebSocket') {
                 const a0 = node.arguments?.[0];
-                if (a0?.type === 'Literal' && typeof a0.value === 'string') addOrigin(policy['connect-src'], a0.value, baseURL);
-            }
-            if (node.type === 'ImportExpression') {
-                const src = node.source;
-                if (src?.type === 'Literal' && typeof src.value === 'string') addOrigin(policy['script-src'], src.value, baseURL);
-            }
-            if (node.type === 'AssignmentExpression'
-                && node.left?.type === 'MemberExpression'
-                && node.left.property?.name === 'src'
-                && node.right?.type === 'Literal'
-                && typeof node.right.value === 'string') {
-                addOrigin(policy['script-src'], node.right.value, baseURL);
-                addOrigin(policy['img-src'], node.right.value, baseURL);
+                if (a0?.type === 'Literal' && typeof a0.value === 'string')
+                    addOrigin(policy['connect-src'], a0.value, baseURL);
             }
         }
     });
@@ -124,81 +114,35 @@ function parseJSIntoPolicy(policy, jsCode, baseURL) {
 
 function stringify(policy, { reportUri = '/csp-report' } = {}) {
     const map = { ...policy, 'report-uri': new Set([reportUri]) };
-    return Object.entries(map).map(([d, vals]) => `${d} ${[...vals].join(' ')};`).join(' ');
+    const order = Object.keys(map).sort();
+    return order.map(d => `${d} ${[...map[d]].join(' ')};`).join(' ');
 }
 
-/* ---------- メインAPI ---------- */
-/**
- * opts:
- *  - mode: 'compat' | 'nonce'  (default 'compat')
- *  - reportUri: string
- *  - addReportOnly: boolean  ← 監視用ヘッダも同時に返す
- *  - reportOnlyStyle: 'mirror' | 'monitor' | 'relaxed'
- *      - mirror  : enforce と同一（現状維持）
- *      - monitor : ★推奨。TT を要求 + script を緩めて観測
- *      - relaxed : さらに緩い観測（調査用）
- */
+/* ---------- main API ---------- */
 export async function generateCSP(url, html, opts = {}) {
-    const mode = opts.mode ?? 'compat';
-    const nonce = mode === 'nonce' ? (opts.nonce || randomBytes(16).toString('base64')) : undefined;
+    const nonce = opts.nonce || randomBytes(16).toString('base64');
 
-    // 強制用ポリシー（enforce）
-    let enforce = (mode === 'nonce') ? basePolicyNonce(nonce) : basePolicyCompat();
-    enforce = parseHTML(html, url, enforce, { mode });
+    let enforce = basePolicyNonce(nonce);
+    enforce = parseHTML(html, url, enforce);
     enforce = await parseCSS(html, url, enforce);
 
     const { document: doc } = new JSDOM(html, { url }).window;
-    for (const s of doc.querySelectorAll('script:not([src])')) {
-        parseJSIntoPolicy(enforce, s.textContent || '', url);
+    for (const s of doc.querySelectorAll('script[src]')) {
+        try {
+            const js = await axios.get(s.src).then(r => r.data);
+            parseJSIntoPolicy(enforce, js, url);
+        } catch { }
     }
-    const srcs = [...doc.querySelectorAll('script[src]')].map(sc => sc.src);
-    const jsList = await Promise.all(srcs.map(u => axios.get(u).then(r => r.data).catch(() => null)));
-    jsList.forEach(js => parseJSIntoPolicy(enforce, js || '', url));
 
-    const enforceHeader = stringify(enforce, { reportUri: opts.reportUri ?? '/csp-report' });
+    const enforceHeader = stringify(enforce, { reportUri: opts.reportUri });
 
-    // Report-Only（監視重視型）
     let reportOnlyHeader = null;
     if (opts.addReportOnly) {
-        const style = opts.reportOnlyStyle ?? 'monitor'; // ← デフォルトで “監視重視型”
-        let ro = deepClonePolicy(enforce);
-
-        if (style === 'mirror') {
-            // そのまま
-        } else if (style === 'monitor') {
-            // Trusted Types 監視を有効化
-            ro["require-trusted-types-for"] = new Set(["'script'"]);
-            ro["trusted-types"] = new Set(["default"]);
-            // 観測のため script を緩める（ブロックしない観測を優先）
-            ro["script-src"].add("'unsafe-inline'");
-            ro["script-src"].add("'unsafe-eval'");
-            ro["script-src"].add("data:");
-            ro["script-src"].add("https:");
-        } else if (style === 'relaxed') {
-            ro["require-trusted-types-for"] = new Set(["'script'"]);
-            ro["trusted-types"] = new Set(["default"]);
-            ro["script-src"] = new Set(["'self'", "'unsafe-inline'", "'unsafe-eval'", "data:", "https:"]);
-            ro["style-src"].add("'unsafe-inline'");
-            ro["img-src"].add("*");
-            ro["connect-src"].add("https:");
-        }
-
-        reportOnlyHeader = stringify(ro, { reportUri: opts.reportUri ?? '/csp-report' });
+        const ro = deepClonePolicy(enforce);
+        ro["require-trusted-types-for"] = new Set(["'script'"]);
+        ro["trusted-types"] = new Set(["default"]);
+        reportOnlyHeader = stringify(ro, { reportUri: opts.reportUri });
     }
 
     return { enforceHeader, reportOnlyHeader, nonce };
-}
-
-/* CLI (任意) */
-if (import.meta.url === `file://${process.argv[1]}`) {
-    const target = process.argv[2];
-    if (!target) {
-        console.error('Usage: node csp-generator.mjs <URL>');
-        process.exit(1);
-    }
-    const html = await (await fetch(target)).text();
-    const { enforceHeader, reportOnlyHeader } =
-        await generateCSP(target, html, { mode: 'compat', addReportOnly: true, reportOnlyStyle: 'monitor' });
-    console.log('--- CSP ---\n' + enforceHeader);
-    console.log('--- CSP-Report-Only ---\n' + reportOnlyHeader);
 }

@@ -1,27 +1,36 @@
+<!-- OK -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-  </head>
-  <body>
-    <script defer>
-      window.addEventListener('securitypolicyviolation', (e) => {
-        console.log(e);
-        securitypolicyviolation({
-          effectiveDirective: e.effectiveDirective,
-          blockedURI: e.blockedURI,
-        });
-      });
-    </script>
-    <h1>aaa</h1>
 
-    <!-- <script src="./index.mjs"></script> -->
-    <!-- <script src="./script.mjs"></script> -->
-    <script defer>
-      document.querySelector('h1').innerHTML =
-        '<div style="display: none">Foo</div>';
-      // .innerHTML =
-      //   '<div style="display: none">Foo</div>';
-    </script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+</head>
+
+<body>
+  <script defer>
+    window.addEventListener('securitypolicyviolation', (e) => {
+      console.log(e);
+      securitypolicyviolation({
+        effectiveDirective: e.effectiveDirective,
+        blockedURI: e.blockedURI,
+      });
+    });
+  </script>
+
+  <h1>aaa</h1>
+
+  <!-- <script src="./index.mjs"></script> -->
+  <!-- <script src="./script.mjs"></script> -->
+
+  <!-- 破壊的な innerHTML 代入をやめて追記に変更 -->
+  <script defer>
+    const h1 = document.querySelector('h1');
+    if (h1) {
+      // 以前: h1.innerHTML = '<div style="display: none">Foo</div>';
+      // 方法2: 末尾に追記（aaa は残る）
+      h1.insertAdjacentHTML('beforeend', '<div style="display: none">Foo</div>');
+    }
+  </script>
+</body>
+
 </html>

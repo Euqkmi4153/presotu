@@ -1,27 +1,99 @@
-<!DOCTYPE html>
-<html lang="en">
-
+<!doctype html>
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <!-- <script src="https://not-example.com/js/library.js"></script> -->
-  <meta http-equiv="content-security-policy"
-    content="script-src 'strict-dynamic' 'sha256-i01M4d3OlcvBtd27xF9C7gE4EIdDo0pONgXfdV3rarA=' 'unsafe-hashes'; style-src 'none'" />
-</head>
+  <meta charset="utf-8" />
+  <title>XSS payload test</title>
 
-<body>
   <script>
-    window.addEventListener('securitypolicyviolation', (e) => {
-      console.log(e);
-      securitypolicyviolation({
-        effectiveDirective: e.effectiveDirective,
-        blockedURI: e.blockedURI,
-      });
+    window.__XSS__ = {
+      fired: false,
+      firedBy: null,
+      calls: [],
+      ev: {
+        click:0, hover:0, focus:0, blur:0, error:0, load:0, scroll:0, hashchange:0, resize:0,
+        keydown:0, keypress:0, keyup:0, paste:0, input:0, submit:0
+      },
+      csp: []
+    };
+
+    const mark = (kind, args) => {
+      try {
+        window.__XSS__.fired = true;
+        window.__XSS__.firedBy = window.__XSS__.firedBy || kind;
+        window.__XSS__.calls.push({ kind, args: Array.from(args || []) });
+        console.log("[XSS_FIRED]", kind, JSON.stringify(Array.from(args || [])));
+      } catch {}
+    };
+
+    window.alert = (...a) => mark("alert", a);
+    window.prompt = (...a) => (mark("prompt", a), "x");
+    window.confirm = (...a) => (mark("confirm", a), true);
+
+    // detection hooks
+    const _eval = window.eval;
+    window.eval = (...a) => (mark("eval", a), _eval(...a));
+    const _Function = window.Function;
+    window.Function = function(...a) {
+      mark("Function", a);
+      return _Function.apply(this, a);
+    };
+
+    const bump = (k) => { try { window.__XSS__.ev[k]++; } catch {} };
+
+    document.addEventListener("click", ()=>bump("click"), true);
+    document.addEventListener("mouseover", ()=>bump("hover"), true);
+    document.addEventListener("mouseenter", ()=>bump("hover"), true);
+    document.addEventListener("mousemove", ()=>bump("hover"), true);
+
+    document.addEventListener("focus", ()=>bump("focus"), true);
+    document.addEventListener("blur", ()=>bump("blur"), true);
+
+    window.addEventListener("error", ()=>bump("error"), true);
+    window.addEventListener("load", ()=>bump("load"), true);
+
+    window.addEventListener("scroll", ()=>bump("scroll"), true);
+    window.addEventListener("hashchange", ()=>bump("hashchange"), true);
+    window.addEventListener("resize", ()=>bump("resize"), true);
+
+    document.addEventListener("keydown", ()=>bump("keydown"), true);
+    document.addEventListener("keypress", ()=>bump("keypress"), true);
+    document.addEventListener("keyup", ()=>bump("keyup"), true);
+    document.addEventListener("paste", ()=>bump("paste"), true);
+    document.addEventListener("input", ()=>bump("input"), true);
+    document.addEventListener("submit", ()=>bump("submit"), true);
+
+    // CSP violation logging (directive normalized)
+    window.addEventListener("securitypolicyviolation", (e) => {
+      try {
+        const d = e.effectiveDirective || e.violatedDirective || "unknown";
+        const obj = {
+          directive: d,
+          effectiveDirective: e.effectiveDirective || null,
+          violatedDirective: e.violatedDirective || null,
+          blockedURI: e.blockedURI || null,
+          disposition: e.disposition || null
+        };
+        window.__XSS__.csp.push(obj);
+        console.log("[CSP_VIOLATION]", JSON.stringify(obj));
+      } catch {}
+    });
+
+    // compatibility dummy
+    window.securitypolicyviolation||(window.securitypolicyviolation=function(p){
+      try{console.log('[CSP-violation]',p)}catch(_){}
     });
   </script>
-  <h1>aaa</h1>
-  <script src="http://localhost:8080/test/targetSite/script.js"
-    integrity="sha256-i01M4d3OlcvBtd27xF9C7gE4EIdDo0pONgXfdV3rarA="></script>
-  <!-- <script src="https://code.jquery.com/jquery-2.2.4.js"></script> -->
-</body>
+</head>
+<body>
+  <h1>payload test</h1>
+  <div id="sink">%3Cx onxxx=alert(1)</div>
 
+  <input id="focusme" autofocus />
+  <form id="f" action="#">
+    <input id="t" value="x" />
+    <button id="submitBtn" type="submit">submit</button>
+  </form>
+
+  <div style="height: 2000px">scroll area</div>
+</body>
 </html>
